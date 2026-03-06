@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: profile_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./var/postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+    - transfans-net
+  
+  profile-rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+    - transfans-net
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./var/minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+    - transfans-net
+
+  profile-service:
+    build: .
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/profile_db
+      JWT_SECRET_KEY: super-secret-key-change-in-production-min-32-chars
+      JWT_ALGORITHM: HS256
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_NAME: avatars
+      MINIO_USE_SSL: "false"
+      RABBITMQ_URL: amqp://guest:guest@profile-rabbitmq:5672/
+      INTERNAL_SECRET: change-me-internal-secret
+      APP_ENV: development
+      DEBUG: "true"
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      profile-rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8002"
+    networks:
+    - transfans-net
+networks:
+  transfans-net:
+    external: true
