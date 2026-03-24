@@ -24,6 +24,12 @@ async def connect_rabbitmq() -> None:
         auth_creator_queue = await _channel.declare_queue("auth.creator_activated", durable=True)
         await auth_creator_queue.bind(exchange, routing_key="creator.activated")
 
+        create_request_queue = await _channel.declare_queue("profile.subscription_create_request", durable=True)
+        await create_request_queue.bind(exchange, routing_key="subscription.create.request")
+
+        deactivate_request_queue = await _channel.declare_queue("profile.subscription_deactivate_request", durable=True)
+        await deactivate_request_queue.bind(exchange, routing_key="subscription.deactivate.request")
+
         logger.info("Connected to RabbitMQ, queues declared")
     except Exception:
         logger.warning("Failed to connect to RabbitMQ — events will not be published", exc_info=True)
@@ -37,6 +43,10 @@ async def disconnect_rabbitmq() -> None:
     if _connection:
         await _connection.close()
         _connection = None
+
+
+def get_channel() -> aio_pika.abc.AbstractChannel | None:
+    return _channel
 
 
 async def publish_event(routing_key: str, data: dict) -> None:

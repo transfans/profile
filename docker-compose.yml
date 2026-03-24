@@ -15,8 +15,8 @@ services:
       timeout: 5s
       retries: 5
     networks:
-    - transfans-net
-  
+      - transfans-net
+
   profile-rabbitmq:
     image: rabbitmq:3.13-management-alpine
     environment:
@@ -31,7 +31,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-    - transfans-net
+      - transfans-net
 
   minio:
     image: minio/minio:latest
@@ -50,14 +50,14 @@ services:
       timeout: 5s
       retries: 5
     networks:
-    - transfans-net
+      - transfans-net
 
   profile-service:
     build: .
     ports:
       - "8002:8002"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/profile_db
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@10.20.224.44:5433/profile_db
       JWT_SECRET_KEY: super-secret-key-change-in-production-min-32-chars
       JWT_ALGORITHM: HS256
       MINIO_ENDPOINT: minio:9000
@@ -66,7 +66,7 @@ services:
       MINIO_BUCKET_NAME: avatars
       MINIO_USE_SSL: "false"
       RABBITMQ_URL: amqp://guest:guest@profile-rabbitmq:5672/
-      INTERNAL_SECRET: change-me-internal-secret
+      INTERNAL_SECRET: secret
       APP_ENV: development
       DEBUG: "true"
     volumes:
@@ -81,7 +81,7 @@ services:
     command: >
       sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8002"
     networks:
-    - transfans-net
+      - transfans-net
 networks:
   transfans-net:
     external: true

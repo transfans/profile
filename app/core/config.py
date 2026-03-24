@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5673/"
 
-    INTERNAL_SECRET: str = "change-me-internal-secret"
+    INTERNAL_SECRET: str = "secret"
 
     APP_ENV: str = "development"
     DEBUG: bool = True

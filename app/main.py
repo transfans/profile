@@ -11,6 +11,7 @@ from app.api.profiles import router as profiles_router
 from app.api.subscriptions import router as subscriptions_router
 from app.api.tiers import router as tiers_router
 from app.core.config import settings
+from app.events.consumer import start_consuming, stop_consuming
 from app.events.publisher import connect_rabbitmq, disconnect_rabbitmq
 from app.services.avatar_service import ensure_bucket_exists
 from app.tasks.subscription_expiry import subscription_expiry_loop
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_rabbitmq()
+    await start_consuming()
 
     try:
         await asyncio.to_thread(ensure_bucket_exists)
@@ -42,6 +44,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+    await stop_consuming()
     await disconnect_rabbitmq()
 
 
