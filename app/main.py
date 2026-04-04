@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.analytics import router as analytics_router
 from app.api.avatars import router as avatars_router
 from app.api.creators import router as creators_router
 from app.api.internal import router as internal_router
@@ -13,6 +14,7 @@ from app.api.tiers import router as tiers_router
 from app.core.config import settings
 from app.events.consumer import start_consuming, stop_consuming
 from app.events.publisher import connect_rabbitmq, disconnect_rabbitmq
+from app.services.analytics_client import close_analytics_client
 from app.services.avatar_service import ensure_bucket_exists
 from app.tasks.subscription_expiry import subscription_expiry_loop
 
@@ -46,6 +48,7 @@ async def lifespan(app: FastAPI):
 
     await stop_consuming()
     await disconnect_rabbitmq()
+    await close_analytics_client()
 
 
 app = FastAPI(
@@ -55,6 +58,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(analytics_router)
 app.include_router(profiles_router)
 app.include_router(avatars_router)
 app.include_router(creators_router)

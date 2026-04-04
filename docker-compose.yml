@@ -1,5 +1,5 @@
 services:
-  postgres:
+  profile-postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
@@ -57,7 +57,7 @@ services:
     ports:
       - "8002:8002"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@10.20.224.44:5433/profile_db
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@profile-postgres:5432/profile_db
       JWT_SECRET_KEY: super-secret-key-change-in-production-min-32-chars
       JWT_ALGORITHM: HS256
       MINIO_ENDPOINT: minio:9000
@@ -67,19 +67,21 @@ services:
       MINIO_USE_SSL: "false"
       RABBITMQ_URL: amqp://guest:guest@profile-rabbitmq:5672/
       INTERNAL_SECRET: secret
+      ANALYTICS_BASE_URL: http://analytics-service:8003
       APP_ENV: development
       DEBUG: "true"
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./app:/app/app
     depends_on:
-      postgres:
+      profile-postgres:
         condition: service_healthy
       profile-rabbitmq:
         condition: service_healthy
       minio:
         condition: service_healthy
     command: >
-      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8002"
+      sh -c "uvicorn app.main:app --reload --host 0.0.0.0 --port 8002"
     networks:
       - transfans-net
 networks:

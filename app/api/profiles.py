@@ -71,6 +71,8 @@ async def update_my_profile(
     profile = await update_profile(db, profile, display_name=body.display_name, bio=body.bio)
 
     await publish_event("profile.updated", {"user_id": str(current_user.id)})
+    if profile.is_creator:
+        await publish_event("creator.updated", {"creator_id": str(current_user.id)})
 
     presigned = await _resolve_avatar_url(profile.avatar_url)
 

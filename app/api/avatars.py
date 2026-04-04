@@ -11,6 +11,7 @@ from app.services.avatar_service import (
     get_avatar_presigned_url,
     upload_avatar,
 )
+from app.events.publisher import publish_event
 from app.services.profile_service import get_or_create_profile, set_avatar_url
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -44,6 +45,9 @@ async def upload_profile_avatar(
 
     object_name = await upload_avatar(current_user.id, file_data, file.content_type)
     await set_avatar_url(db, profile, object_name)
+
+    if profile.is_creator:
+        await publish_event("creator.updated", {"creator_id": str(current_user.id)})
 
     presigned_url = await get_avatar_presigned_url(object_name)
     return AvatarResponse(avatar_url=presigned_url)

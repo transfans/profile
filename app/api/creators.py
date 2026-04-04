@@ -36,6 +36,10 @@ async def activate_creator_mode(
         "creator.activated",
         {"user_id": str(current_user.id)},
     )
+    await publish_event(
+        "creator.created",
+        {"creator_id": str(current_user.id)},
+    )
 
     return ActivateCreatorResponse(
         is_creator=True,

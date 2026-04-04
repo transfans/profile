@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     INTERNAL_SECRET: str = "secret"
 
+    ANALYTICS_BASE_URL: str = "http://analytics-service:8003"
+    ANALYTICS_TIMEOUT_SECONDS: float = 1.0
+
     APP_ENV: str = "development"
     DEBUG: bool = True
 

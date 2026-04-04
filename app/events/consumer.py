@@ -43,6 +43,15 @@ async def _handle_create_subscription(message: aio_pika.abc.AbstractIncomingMess
                 )
 
             await publish_event(
+                "subscription.created",
+                {
+                    "subscription_id": str(created.id),
+                    "fan_id": str(fan_id),
+                    "creator_id": str(creator_id),
+                    "tier_id": str(tier_id),
+                },
+            )
+            await publish_event(
                 "subscription.create.succeeded",
                 {
                     "request_id": request_id,
@@ -85,6 +94,10 @@ async def _handle_deactivate_subscription(message: aio_pika.abc.AbstractIncoming
                     raise ValueError("Subscription not found")
                 await deactivate_subscription(db, subscription)
 
+            await publish_event(
+                "subscription.cancelled",
+                {"subscription_id": str(subscription_id)},
+            )
             await publish_event(
                 "subscription.deactivate.succeeded",
                 {
