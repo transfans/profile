@@ -6,5 +6,4 @@ dist/
 .env
 .ruff_cache/
 .cursor/
-AGENTS.md
 var/
