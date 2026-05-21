@@ -26,6 +26,7 @@ async def check_subscription_access(
     db: AsyncSession = Depends(get_db),
 ) -> SubscriptionCheckResponse:
     result = await check_subscription(db, fan_id, creator_id)
+    print(result)
     return SubscriptionCheckResponse(**result)
 
 

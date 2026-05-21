@@ -9,9 +9,7 @@ from app.models.enums import SubscriptionStatus
 from app.models.subscription import Subscription
 
 
-async def check_subscription(
-    db: AsyncSession, fan_id: uuid.UUID, creator_id: uuid.UUID
-) -> dict:
+async def check_subscription(db: AsyncSession, fan_id: uuid.UUID, creator_id: uuid.UUID) -> dict:
     result = await db.execute(
         select(Subscription).where(
             and_(
@@ -48,9 +46,7 @@ async def create_subscription(
 
 
 async def get_subscription_by_id(db: AsyncSession, subscription_id: uuid.UUID) -> Subscription | None:
-    result = await db.execute(
-        select(Subscription).where(Subscription.id == subscription_id)
-    )
+    result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
     return result.scalar_one_or_none()
 
 
@@ -78,10 +74,14 @@ async def get_fan_subscriptions(
 async def get_creator_subscribers(
     db: AsyncSession, creator_id: uuid.UUID, page: int = 1, limit: int = 20
 ) -> tuple[list[Subscription], int]:
-    count_query = select(func.count()).select_from(Subscription).where(
-        and_(
-            Subscription.creator_id == creator_id,
-            Subscription.status == SubscriptionStatus.active,
+    count_query = (
+        select(func.count())
+        .select_from(Subscription)
+        .where(
+            and_(
+                Subscription.creator_id == creator_id,
+                Subscription.status == SubscriptionStatus.active,
+            )
         )
     )
     total_result = await db.execute(count_query)
