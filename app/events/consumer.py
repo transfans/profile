@@ -5,6 +5,7 @@ from datetime import datetime
 
 import aio_pika
 
+from app.core.logging import correlation_id_var
 from app.db.session import async_session_factory
 from app.events.publisher import get_channel, publish_event
 from app.services.subscription_service import (
@@ -26,6 +27,10 @@ async def _handle_create_subscription(message: aio_pika.abc.AbstractIncomingMess
         envelope = json.loads(message.body)
         request_id = envelope.get("request_id")
         data = envelope.get("data", {})
+
+        cid = message.correlation_id or str(uuid.uuid4())
+        token = correlation_id_var.set(cid)
+        logger.info("Received subscription.create.request  fan=%s  creator=%s", data.get("fan_id"), data.get("creator_id"))
 
         try:
             fan_id = uuid.UUID(data["fan_id"])
@@ -62,7 +67,7 @@ async def _handle_create_subscription(message: aio_pika.abc.AbstractIncomingMess
                 },
             )
         except Exception as exc:
-            logger.error("Failed to process subscription.create.request", exc_info=True)
+            logger.error("Failed to process subscription.create.request  fan=%s", data.get("fan_id"), exc_info=True)
             await publish_event(
                 "subscription.create.failed",
                 {
@@ -74,6 +79,8 @@ async def _handle_create_subscription(message: aio_pika.abc.AbstractIncomingMess
                     "tier_id": data.get("tier_id"),
                 },
             )
+        finally:
+            correlation_id_var.reset(token)
 
 
 async def _handle_deactivate_subscription(message: aio_pika.abc.AbstractIncomingMessage) -> None:
@@ -82,6 +89,10 @@ async def _handle_deactivate_subscription(message: aio_pika.abc.AbstractIncoming
         request_id = envelope.get("request_id")
         data = envelope.get("data", {})
         subscription_id_value = data.get("subscription_id")
+
+        cid = message.correlation_id or str(uuid.uuid4())
+        token = correlation_id_var.set(cid)
+        logger.info("Received subscription.deactivate.request  sub=%s", subscription_id_value)
 
         try:
             if not subscription_id_value:
@@ -107,7 +118,7 @@ async def _handle_deactivate_subscription(message: aio_pika.abc.AbstractIncoming
                 },
             )
         except Exception as exc:
-            logger.error("Failed to process subscription.deactivate.request", exc_info=True)
+            logger.error("Failed to process subscription.deactivate.request  sub=%s", subscription_id_value, exc_info=True)
             await publish_event(
                 "subscription.deactivate.failed",
                 {
@@ -117,6 +128,8 @@ async def _handle_deactivate_subscription(message: aio_pika.abc.AbstractIncoming
                     "subscription_id": subscription_id_value,
                 },
             )
+        finally:
+            correlation_id_var.reset(token)
 
 
 async def start_consuming() -> None:

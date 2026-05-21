@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import aio_pika
 
 from app.core.config import settings
+from app.core.logging import correlation_id_var
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ async def publish_event(routing_key: str, data: dict) -> None:
 
     try:
         exchange = await _channel.get_exchange(EXCHANGE_NAME)
+        cid = correlation_id_var.get()
         message = aio_pika.Message(
             body=json.dumps(
                 {
@@ -65,7 +67,9 @@ async def publish_event(routing_key: str, data: dict) -> None:
                 }
             ).encode(),
             content_type="application/json",
+            correlation_id=cid,
         )
         await exchange.publish(message, routing_key=routing_key)
+        logger.debug("Published %s  cid=%s", routing_key, cid)
     except Exception:
         logger.error("Failed to publish event: %s", routing_key, exc_info=True)
