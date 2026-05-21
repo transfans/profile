@@ -1,6 +1,6 @@
+import sys
 from collections.abc import AsyncGenerator
 from pathlib import Path
-import sys
 from uuid import uuid4
 
 import pytest
@@ -9,6 +9,8 @@ from httpx import ASGITransport, AsyncClient
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+import app.models.subscription as _subscription_model  # noqa: F401
+import app.models.tier as _tier_model  # noqa: F401
 from app.api.analytics import router as analytics_router
 from app.api.avatars import router as avatars_router
 from app.api.creators import router as creators_router
@@ -18,8 +20,6 @@ from app.api.subscriptions import router as subscriptions_router
 from app.api.tiers import router as tiers_router
 from app.core.dependencies import CurrentUser
 from app.db.session import get_db
-import app.models.tier as _tier_model  # noqa: F401
-import app.models.subscription as _subscription_model  # noqa: F401
 
 
 class DummyDbSession:

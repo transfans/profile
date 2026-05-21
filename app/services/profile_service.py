@@ -10,9 +10,7 @@ from app.models.profile import Profile
 
 
 async def get_profile_by_user_id(db: AsyncSession, user_id: uuid.UUID) -> Profile | None:
-    result = await db.execute(
-        select(Profile).where(Profile.user_id == user_id).options(selectinload(Profile.tiers))
-    )
+    result = await db.execute(select(Profile).where(Profile.user_id == user_id).options(selectinload(Profile.tiers)))
     return result.scalar_one_or_none()
 
 

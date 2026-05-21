@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_current_user
 from app.db.session import get_db
+from app.events.publisher import publish_event
 from app.schemas.profile import AvatarResponse
 from app.services.avatar_service import (
     ALLOWED_CONTENT_TYPES,
@@ -11,7 +12,6 @@ from app.services.avatar_service import (
     get_avatar_presigned_url,
     upload_avatar,
 )
-from app.events.publisher import publish_event
 from app.services.profile_service import get_or_create_profile, set_avatar_url
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])

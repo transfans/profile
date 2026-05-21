@@ -24,7 +24,9 @@ class _CircuitState(Enum):
 
 
 class _CircuitBreaker:
-    def __init__(self, failure_threshold: int = _CB_FAILURE_THRESHOLD, recovery_timeout_s: float = _CB_RECOVERY_TIMEOUT_S) -> None:
+    def __init__(
+        self, failure_threshold: int = _CB_FAILURE_THRESHOLD, recovery_timeout_s: float = _CB_RECOVERY_TIMEOUT_S
+    ) -> None:
         self._threshold = failure_threshold
         self._recovery = recovery_timeout_s
         self._failures = 0
@@ -62,6 +64,7 @@ class _CircuitBreaker:
 
 _breaker = _CircuitBreaker()
 _client: httpx.AsyncClient | None = None
+
 
 def _get_client() -> httpx.AsyncClient:
     global _client

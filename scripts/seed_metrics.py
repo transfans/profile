@@ -1,11 +1,16 @@
 """
-Seed script — creates realistic traffic against the profile service for ~60s so
-Grafana panels fill up with time-series data instead of a single spike.
+Seed script — creates realistic traffic against the profile service so Grafana
+panels fill up with time-series data.
 
 Usage (from the profile/ directory, stack must be running):
-    python scripts/seed_metrics.py [--base-url http://localhost:8002] \
-                                   [--creators 10] [--fans 30] \
-                                   [--duration 60]
+    python scripts/seed_metrics.py [options]
+
+Options:
+    --base-url   http://localhost:8002   Service base URL
+    --creators   10                      Number of creator users to seed
+    --fans       30                      Number of fan users to seed
+    --duration   60                      Seconds to run continuous traffic
+    --concurrency 40                     Concurrent async workers during traffic phase
 
 Requirements: python-jose and httpx — both already in the project's dependencies.
 """
@@ -15,6 +20,7 @@ import asyncio
 import random
 import time
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -28,18 +34,15 @@ INTERNAL_SECRET = "secret"
 N_CREATORS = 10
 N_FANS = 30
 DURATION_SECS = 60
+CONCURRENCY = 40
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
+
 def _mint(user_id: str, role: str, email: str) -> str:
     return jwt.encode(
-        {
-            "sub": user_id,
-            "role": role,
-            "email": email,
-            "exp": datetime.now(UTC) + timedelta(hours=1),
-        },
+        {"sub": user_id, "role": role, "email": email, "exp": datetime.now(UTC) + timedelta(hours=2)},
         JWT_SECRET,
         algorithm=JWT_ALGORITHM,
     )
@@ -55,6 +58,7 @@ def _internal() -> dict:
 
 # ── setup phases ───────────────────────────────────────────────────────────────
 
+
 async def phase_creators(client: httpx.AsyncClient, n: int) -> list[dict]:
     creators = []
     for i in range(n):
@@ -63,7 +67,6 @@ async def phase_creators(client: httpx.AsyncClient, n: int) -> list[dict]:
         token = _mint(uid, "creator", email)
 
         await client.get("/profiles/me", headers=_auth(token))
-
         r = await client.patch("/profiles/me/activate-creator", headers=_auth(token))
         if r.status_code not in (200, 409):
             print(f"  [warn] activate-creator {uid}: {r.status_code}")
@@ -84,7 +87,6 @@ async def phase_creators(client: httpx.AsyncClient, n: int) -> list[dict]:
 
         creators.append({"id": uid, "token": token, "tier_ids": tier_ids})
         print(f"  creator {i + 1}/{n}: {uid} — {len(tier_ids)} tiers")
-
     return creators
 
 
@@ -98,20 +100,19 @@ async def phase_fans(client: httpx.AsyncClient, n: int) -> list[dict]:
         await client.get("/profiles/me", headers=_auth(token))
         await client.patch(
             "/profiles/me",
-            json={"display_name": f"Fan {i}", "bio": f"Seeded fan #{i}"},
+            json={
+                "display_name": f"Fan {i}",
+                "bio": f"Seeded fan #{i}",
+            },
             headers=_auth(token),
         )
 
         fans.append({"id": uid, "token": token})
         print(f"  fan {i + 1}/{n}: {uid}")
-
     return fans
 
 
-async def phase_subscriptions(
-    client: httpx.AsyncClient, fans: list[dict], creators: list[dict]
-) -> list[dict]:
-    """Subscribe every fan to one random creator tier. Returns subscription records."""
+async def phase_subscriptions(client: httpx.AsyncClient, fans: list[dict], creators: list[dict]) -> list[dict]:
     created = []
     for fan in fans:
         creator = random.choice(creators)
@@ -136,90 +137,110 @@ async def phase_subscriptions(
                     "creator_id": creator["id"],
                 }
             )
-        else:
-            print(f"  [warn] subscribe {fan['id']}: {r.status_code} {r.text[:80]}")
+    print(f"  {len(created)} subscriptions created")
     return created
 
 
 # ── continuous traffic ─────────────────────────────────────────────────────────
 
-async def _one_wave(
+
+# Weighted action table: (weight, label, coroutine_factory)
+# Higher weight = picked more often
+def _build_actions(client, fans, creators, subscriptions):
+    fan_tokens = [f["token"] for f in fans]
+    creator_tokens = [c["token"] for c in creators]
+    creator_ids = [c["id"] for c in creators]
+    all_tier_ids = [tid for c in creators for tid in c["tier_ids"]]
+
+    actions = [
+        # weight, label, lambda → coroutine
+        (30, "GET /profiles/me", lambda: client.get("/profiles/me", headers=_auth(random.choice(fan_tokens)))),
+        (20, "GET /profiles/{id}", lambda: client.get(f"/profiles/{random.choice(creator_ids)}")),
+        (10, "GET /creators", lambda: client.get("/creators")),
+        (
+            8,
+            "PATCH /profiles/me",
+            lambda: client.patch(
+                "/profiles/me", json={"bio": f"bio {random.randint(0, 9999)}"}, headers=_auth(random.choice(fan_tokens))
+            ),
+        ),
+        (6, "GET /subscriptions/my", lambda: client.get("/subscriptions/my", headers=_auth(random.choice(fan_tokens)))),
+        (
+            5,
+            "PATCH /tiers/{id}",
+            lambda: client.patch(
+                f"/tiers/{random.choice(all_tier_ids)}",
+                json={"name": f"tier {random.randint(0, 999)}"},
+                headers=_auth(random.choice(creator_tokens)),
+            ),
+        ),
+        (5, "GET /profiles/404", lambda: client.get(f"/profiles/{uuid.uuid4()}")),  # intentional 404
+        (4, "POST /internal/subscriptions", lambda: _new_subscription(client, creators)),
+        (2, "PATCH /internal/deactivate", lambda: _cancel_subscription(client, subscriptions)),
+    ]
+    return actions
+
+
+async def _new_subscription(client, creators):
+    uid = str(uuid.uuid4())
+    token = _mint(uid, "fan", f"lt_{uid[:8]}@example.com")
+    await client.get("/profiles/me", headers=_auth(token))
+    creator = random.choice(creators)
+    if not creator["tier_ids"]:
+        return
+    return await client.post(
+        "/internal/subscriptions",
+        json={
+            "fan_id": uid,
+            "creator_id": creator["id"],
+            "tier_id": random.choice(creator["tier_ids"]),
+            "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+        },
+        headers=_internal(),
+    )
+
+
+async def _cancel_subscription(client, subscriptions):
+    if not subscriptions:
+        return
+    sub = random.choice(subscriptions)
+    return await client.patch(
+        f"/internal/subscriptions/{sub['id']}/deactivate",
+        headers=_internal(),
+    )
+
+
+async def _worker(
     client: httpx.AsyncClient,
-    fans: list[dict],
-    creators: list[dict],
-    subscriptions: list[dict],
-    wave: int,
+    actions: list,
+    deadline: float,
+    counters: dict,
 ) -> None:
-    """Fire a burst of mixed requests that produces varied metrics."""
-    tasks = []
+    weights = [a[0] for a in actions]
+    total_weight = sum(weights)
+    thresholds = []
+    cumulative = 0
+    for w, label, _ in actions:
+        cumulative += w
+        thresholds.append((cumulative / total_weight, label))
 
-    # fan profile reads (most common in a real app)
-    sample_fans = random.sample(fans, min(8, len(fans)))
-    for fan in sample_fans:
-        tasks.append(client.get("/profiles/me", headers=_auth(fan["token"])))
+    while time.monotonic() < deadline:
+        r = random.random()
+        chosen_label = thresholds[-1][1]
+        chosen_fn = actions[-1][2]
+        for i, (threshold, label) in enumerate(thresholds):
+            if r < threshold:
+                chosen_label = label
+                chosen_fn = actions[i][2]
+                break
 
-    # creator profile reads by fans
-    sample_creators = random.sample(creators, min(5, len(creators)))
-    for creator in sample_creators:
-        tasks.append(client.get(f"/profiles/{creator['id']}"))
+        try:
+            await chosen_fn()
+            counters[chosen_label] += 1
+        except Exception:
+            counters["errors"] += 1
 
-    # creator list browsing
-    tasks.append(client.get("/creators"))
-    tasks.append(client.get(f"/creators?q=creator+{random.randint(0, 9)}"))
-
-    # intentional 404s — non-existent lookups (generates error-rate signal)
-    for _ in range(3):
-        tasks.append(client.get(f"/profiles/{uuid.uuid4()}"))
-
-    # profile updates
-    for fan in random.sample(fans, min(3, len(fans))):
-        tasks.append(
-            client.patch(
-                "/profiles/me",
-                json={"bio": f"Updated in wave {wave}"},
-                headers=_auth(fan["token"]),
-            )
-        )
-
-    # tier updates from creators
-    for creator in random.sample(creators, min(2, len(creators))):
-        if creator["tier_ids"]:
-            tid = random.choice(creator["tier_ids"])
-            tasks.append(
-                client.patch(
-                    f"/tiers/{tid}",
-                    json={"name": f"Wave-{wave} tier"},
-                    headers=_auth(creator["token"]),
-                )
-            )
-
-    # occasionally subscribe a new fan mid-run (keeps subscriptions_created rising)
-    if random.random() < 0.3:
-        uid = str(uuid.uuid4())
-        token = _mint(uid, "fan", f"latecomer_{uid[:8]}@example.com")
-        await client.get("/profiles/me", headers=_auth(token))
-        creator = random.choice(creators)
-        if creator["tier_ids"]:
-            await client.post(
-                "/internal/subscriptions",
-                json={
-                    "fan_id": uid,
-                    "creator_id": creator["id"],
-                    "tier_id": random.choice(creator["tier_ids"]),
-                    "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
-                },
-                headers=_internal(),
-            )
-
-    # occasionally cancel a subscription (keeps subscriptions_cancelled non-zero)
-    if subscriptions and random.random() < 0.2:
-        sub = random.choice(subscriptions)
-        await client.patch(
-            f"/internal/subscriptions/{sub['id']}/deactivate",
-            headers=_internal(),
-        )
-
-    await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.sleep(0)  # yield to event loop without blocking
 
 
 async def continuous_traffic(
@@ -228,21 +249,43 @@ async def continuous_traffic(
     creators: list[dict],
     subscriptions: list[dict],
     duration: float,
+    concurrency: int,
 ) -> None:
+    actions = _build_actions(client, fans, creators, subscriptions)
+    counters: dict = defaultdict(int)
     deadline = time.monotonic() + duration
-    wave = 0
-    while time.monotonic() < deadline:
-        wave += 1
-        remaining = deadline - time.monotonic()
-        print(f"  wave {wave} — {remaining:.0f}s remaining")
-        await _one_wave(client, fans, creators, subscriptions, wave)
-        await asyncio.sleep(random.uniform(1.5, 3.0))  # vary inter-wave gap
+
+    workers = [_worker(client, actions, deadline, counters) for _ in range(concurrency)]
+
+    t0 = time.monotonic()
+
+    # progress reporter
+    async def _reporter():
+        while time.monotonic() < deadline:
+            await asyncio.sleep(5)
+            elapsed = time.monotonic() - t0
+            total = sum(v for k, v in counters.items() if k != "errors")
+            print(f"  {elapsed:.0f}s  {total} reqs  {total / elapsed:.0f} req/s")
+
+    await asyncio.gather(*workers, _reporter())
+
+    elapsed = time.monotonic() - t0
+    total = sum(v for k, v in counters.items() if k != "errors")
+    print(f"\n  Finished: {total} requests in {elapsed:.1f}s = {total / elapsed:.0f} req/s")
+    if counters["errors"]:
+        print(f"  Errors: {counters['errors']}")
+    print("\n  Breakdown:")
+    for label, count in sorted(counters.items(), key=lambda x: -x[1]):
+        if label != "errors" and count:
+            print(f"    {count:>6}  {label}")
 
 
 # ── main ───────────────────────────────────────────────────────────────────────
 
-async def run(base_url: str, n_creators: int, n_fans: int, duration: float) -> None:
-    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as client:
+
+async def run(base_url: str, n_creators: int, n_fans: int, duration: float, concurrency: int) -> None:
+    limits = httpx.Limits(max_connections=concurrency + 20, max_keepalive_connections=concurrency)
+    async with httpx.AsyncClient(base_url=base_url, timeout=30.0, limits=limits) as client:
         r = await client.get("/health")
         if r.status_code != 200:
             raise SystemExit(f"Service not reachable at {base_url} — got {r.status_code}")
@@ -254,12 +297,11 @@ async def run(base_url: str, n_creators: int, n_fans: int, duration: float) -> N
         print(f"\n=== Phase 2: creating {n_fans} fans ===")
         fans = await phase_fans(client, n_fans)
 
-        print(f"\n=== Phase 3: initial subscriptions ===")
+        print("\n=== Phase 3: initial subscriptions ===")
         subscriptions = await phase_subscriptions(client, fans, creators)
-        print(f"  {len(subscriptions)} subscriptions created")
 
-        print(f"\n=== Phase 4: continuous traffic for ~{duration:.0f}s ===")
-        await continuous_traffic(client, fans, creators, subscriptions, duration)
+        print(f"\n=== Phase 4: {concurrency} concurrent workers for {duration:.0f}s ===")
+        await continuous_traffic(client, fans, creators, subscriptions, duration, concurrency)
 
         print("\nDone. Open Grafana at http://localhost:3000 (admin / admin).")
 
@@ -269,7 +311,10 @@ if __name__ == "__main__":
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--creators", type=int, default=N_CREATORS)
     parser.add_argument("--fans", type=int, default=N_FANS)
-    parser.add_argument("--duration", type=float, default=DURATION_SECS, help="Seconds to run continuous traffic")
+    parser.add_argument("--duration", type=float, default=DURATION_SECS)
+    parser.add_argument(
+        "--concurrency", type=int, default=CONCURRENCY, help="Number of concurrent async workers during traffic phase"
+    )
     args = parser.parse_args()
 
-    asyncio.run(run(args.base_url, args.creators, args.fans, args.duration))
+    asyncio.run(run(args.base_url, args.creators, args.fans, args.duration, args.concurrency))

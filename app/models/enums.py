@@ -1,7 +1,7 @@
 import enum
 
 
-class SubscriptionStatus(str, enum.Enum):
+class SubscriptionStatus(enum.StrEnum):
     active = "active"
     cancelled = "cancelled"
     expired = "expired"

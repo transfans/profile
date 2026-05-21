@@ -31,9 +31,7 @@ async def get_tier_by_id(db: AsyncSession, tier_id: uuid.UUID) -> Tier | None:
 
 
 async def get_tiers_by_creator(db: AsyncSession, creator_id: uuid.UUID) -> list[Tier]:
-    result = await db.execute(
-        select(Tier).where(Tier.creator_id == creator_id).order_by(Tier.created_at)
-    )
+    result = await db.execute(select(Tier).where(Tier.creator_id == creator_id).order_by(Tier.created_at))
     return list(result.scalars().all())
 
 
