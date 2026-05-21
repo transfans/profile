@@ -40,6 +40,7 @@ See: `app/services/avatar_service.py`.
 All `/internal/*` endpoints are protected by `X-Internal-Secret` header validated against the `INTERNAL_SECRET` env var. These endpoints are called by the Payment and Content services and must never be exposed through Nginx.
 
 Endpoints:
+
 - `GET /internal/subscriptions/check` — Content service checks fan access
 - `POST /internal/subscriptions` — Payment service creates subscriptions (legacy sync path during migration)
 - `GET /internal/tiers/{tier_id}` — Payment service fetches tier price
@@ -52,10 +53,12 @@ Async message flow is the target architecture for create/deactivate operations. 
 Exchange: `transfans.events` (type: `topic`, durable: `true`).
 
 Request routing keys:
+
 - `subscription.create.request`
 - `subscription.deactivate.request`
 
 Base envelope (required):
+
 ```json
 {
   "event": "routing.key",
@@ -68,6 +71,7 @@ Base envelope (required):
 ```
 
 `subscription.create.request` payload:
+
 ```json
 {
   "fan_id": "uuid",
@@ -78,6 +82,7 @@ Base envelope (required):
 ```
 
 `subscription.deactivate.request` payload:
+
 ```json
 {
   "subscription_id": "uuid",
@@ -95,6 +100,7 @@ Base envelope (required):
 #### Result/Response Contract
 
 Outcome events:
+
 - `subscription.create.succeeded`
 - `subscription.create.failed`
 - `subscription.deactivate.succeeded`
@@ -103,10 +109,12 @@ Outcome events:
 Result envelope follows the same base fields (`event`, `timestamp`, `message_id`, `request_id`, `initiator_service`, `data`).
 
 Success payloads:
+
 - `subscription.create.succeeded`: `{ "subscription_id": "uuid", "fan_id": "uuid", "creator_id": "uuid", "tier_id": "uuid" }`
 - `subscription.deactivate.succeeded`: `{ "subscription_id": "uuid", "status": "cancelled" }`
 
 Failure payloads:
+
 - `subscription.create.failed`: `{ "reason_code": "string", "reason_message": "string", "fan_id": "uuid", "creator_id": "uuid", "tier_id": "uuid" }`
 - `subscription.deactivate.failed`: `{ "reason_code": "string", "reason_message": "string", "subscription_id": "uuid" }`
 
@@ -128,6 +136,7 @@ See: `app/tasks/subscription_expiry.py`.
 ### RabbitMQ Events
 
 The service publishes to the `transfans.events` topic exchange:
+
 - `creator.activated` — when a user activates creator mode
 - `profile.updated` — when a user updates their profile
 
@@ -136,22 +145,23 @@ See: `app/events/publisher.py`, root-level `event-contract.md`.
 ### Metrics (Prometheus + Grafana)
 
 HTTP instrumentation is provided by `prometheus-fastapi-instrumentator`. It exposes a `/metrics` endpoint on port 8002 and records:
+
 - `http_request_duration_seconds` histogram (latency per route/method/status)
 - `http_requests_inprogress` gauge (concurrent in-flight requests)
 
 Business counters and gauges are defined in `app/metrics.py` and incremented at the point of the event:
 
-| Metric | Type | Where incremented |
-|---|---|---|
-| `profiles_created_total` | Counter | `profile_service.py` → `get_or_create_profile` (new only) |
-| `creators_activated_total` | Counter | `api/creators.py` → `activate_creator_mode` |
-| `tiers_created_total` | Counter | `api/tiers.py` → `create_new_tier` |
-| `tiers_updated_total` | Counter | `api/tiers.py` → `update_existing_tier` |
-| `subscriptions_created_total` | Counter | `api/internal.py` → `create_new_subscription` |
-| `subscriptions_cancelled_total` | Counter | `api/internal.py` → `deactivate_subscription_endpoint` |
-| `subscriptions_expired_total` | Counter | `tasks/subscription_expiry.py` |
-| `active_subscriptions` | Gauge | `api/internal.py` (inc/dec on create/cancel) + expiry task (authoritative DB sync every 5 min) |
-| `analytics_proxy_requests_total{result}` | Counter | `services/analytics_client.py` (result=`success`\|`unavailable`) |
+| Metric                                   | Type    | Where incremented                                                                              |
+| ---------------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `profiles_created_total`                 | Counter | `profile_service.py` → `get_or_create_profile` (new only)                                      |
+| `creators_activated_total`               | Counter | `api/creators.py` → `activate_creator_mode`                                                    |
+| `tiers_created_total`                    | Counter | `api/tiers.py` → `create_new_tier`                                                             |
+| `tiers_updated_total`                    | Counter | `api/tiers.py` → `update_existing_tier`                                                        |
+| `subscriptions_created_total`            | Counter | `api/internal.py` → `create_new_subscription`                                                  |
+| `subscriptions_cancelled_total`          | Counter | `api/internal.py` → `deactivate_subscription_endpoint`                                         |
+| `subscriptions_expired_total`            | Counter | `tasks/subscription_expiry.py`                                                                 |
+| `active_subscriptions`                   | Gauge   | `api/internal.py` (inc/dec on create/cancel) + expiry task (authoritative DB sync every 5 min) |
+| `analytics_proxy_requests_total{result}` | Counter | `services/analytics_client.py` (result=`success`\|`unavailable`)                               |
 
 Prometheus scrapes `profile-service:8002/metrics` every 15s. Grafana is provisioned automatically on startup with a pre-built dashboard (`monitoring/grafana/dashboards/profile_service.json`) containing HTTP and Business Events rows.
 
@@ -173,11 +183,11 @@ All logging is configured in `app/core/logging.py` via `configure_logging()` cal
 
 PostgreSQL 16, database name `profile_db`. Three tables:
 
-| Table | PK | Key columns |
-|---|---|---|
-| `profiles` | `user_id` (UUID) | display_name, bio, avatar_url, email, is_creator |
-| `tiers` | `id` (UUID) | creator_id FK→profiles, name, description, price (immutable), is_active |
-| `subscriptions` | `id` (UUID) | fan_id, creator_id FK→profiles, tier_id FK→tiers, status (enum), expires_at |
+| Table           | PK               | Key columns                                                                 |
+| --------------- | ---------------- | --------------------------------------------------------------------------- |
+| `profiles`      | `user_id` (UUID) | display_name, bio, avatar_url, email, is_creator                            |
+| `tiers`         | `id` (UUID)      | creator_id FK→profiles, name, description, price (immutable), is_active     |
+| `subscriptions` | `id` (UUID)      | fan_id, creator_id FK→profiles, tier_id FK→tiers, status (enum), expires_at |
 
 Price on tiers is immutable after creation. To change price, deactivate the tier and create a new one.
 
@@ -251,14 +261,14 @@ uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
 
 ## Docker Compose Services
 
-| Service | Port (host) | Purpose |
-|---|---|---|
-| profile-postgres | 5433 | PostgreSQL 16 (`profile_db`) |
-| profile-rabbitmq | 5673 / 15673 | RabbitMQ (AMQP / management UI) |
-| minio | 9000 / 9001 | MinIO (S3 API / console) |
-| profile-service | 8002 | FastAPI application + `/metrics` endpoint |
-| prometheus | 9090 | Prometheus (scrapes profile-service every 15s) |
-| grafana | 3000 | Grafana (admin / admin — dashboard auto-provisioned) |
+| Service          | Port (host)  | Purpose                                              |
+| ---------------- | ------------ | ---------------------------------------------------- |
+| profile-postgres | 5433         | PostgreSQL 16 (`profile_db`)                         |
+| profile-rabbitmq | 5673 / 15673 | RabbitMQ (AMQP / management UI)                      |
+| minio            | 9000 / 9001  | MinIO (S3 API / console)                             |
+| profile-service  | 8002         | FastAPI application + `/metrics` endpoint            |
+| prometheus       | 9090         | Prometheus (scrapes profile-service every 15s)       |
+| grafana          | 3000         | Grafana (admin / admin — dashboard auto-provisioned) |
 
 Ports are offset from the Auth service to avoid collision during local development.
 
@@ -279,18 +289,18 @@ Phases: (1) create N creators + tiers, (2) create N fans, (3) subscribe fans to 
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL async connection string |
-| `JWT_SECRET_KEY` | Shared JWT secret (must match Auth service) |
-| `JWT_ALGORITHM` | JWT algorithm (HS256) |
-| `MINIO_ENDPOINT` | MinIO host:port |
-| `MINIO_ACCESS_KEY` | MinIO access key |
-| `MINIO_SECRET_KEY` | MinIO secret key |
-| `MINIO_BUCKET_NAME` | Bucket for avatars |
-| `MINIO_USE_SSL` | Whether to use TLS for MinIO |
-| `RABBITMQ_URL` | AMQP connection string |
-| `INTERNAL_SECRET` | Shared secret for X-Internal-Secret header |
-| `ANALYTICS_BASE_URL` | Base URL of the analytics service |
-| `APP_ENV` | Environment name |
-| `DEBUG` | Enable DEBUG log level (third-party loggers stay at WARNING regardless) |
+| Variable             | Description                                                             |
+| -------------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`       | PostgreSQL async connection string                                      |
+| `JWT_SECRET_KEY`     | Shared JWT secret (must match Auth service)                             |
+| `JWT_ALGORITHM`      | JWT algorithm (HS256)                                                   |
+| `MINIO_ENDPOINT`     | MinIO host:port                                                         |
+| `MINIO_ACCESS_KEY`   | MinIO access key                                                        |
+| `MINIO_SECRET_KEY`   | MinIO secret key                                                        |
+| `MINIO_BUCKET_NAME`  | Bucket for avatars                                                      |
+| `MINIO_USE_SSL`      | Whether to use TLS for MinIO                                            |
+| `RABBITMQ_URL`       | AMQP connection string                                                  |
+| `INTERNAL_SECRET`    | Shared secret for X-Internal-Secret header                              |
+| `ANALYTICS_BASE_URL` | Base URL of the analytics service                                       |
+| `APP_ENV`            | Environment name                                                        |
+| `DEBUG`              | Enable DEBUG log level (third-party loggers stay at WARNING regardless) |
