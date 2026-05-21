@@ -105,6 +105,13 @@ async def get_creator_subscribers(
     return list(result.scalars().all()), total
 
 
+async def count_active_subscriptions(db: AsyncSession) -> int:
+    result = await db.execute(
+        select(func.count()).select_from(Subscription).where(Subscription.status == SubscriptionStatus.active)
+    )
+    return result.scalar() or 0
+
+
 async def expire_overdue_subscriptions(db: AsyncSession) -> int:
     now = datetime.now(UTC)
     result = await db.execute(

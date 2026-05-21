@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.metrics import profiles_created_total
 from app.models.profile import Profile
 
 
@@ -29,6 +30,7 @@ async def get_or_create_profile(db: AsyncSession, user_id: uuid.UUID, email: str
     db.add(profile)
     await db.commit()
     await db.refresh(profile, attribute_names=["tiers"])
+    profiles_created_total.inc()
     return profile
 
 

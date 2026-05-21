@@ -7,6 +7,7 @@ from enum import Enum
 import httpx
 
 from app.core.config import settings
+from app.metrics import analytics_proxy_requests_total
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ async def analytics_get(
 ) -> dict | None:
     if not _breaker.is_available:
         logger.warning("Analytics circuit OPEN — skipping call to %s", path)
+        analytics_proxy_requests_total.labels(result="unavailable").inc()
         return None
 
     headers: dict[str, str] = {
@@ -110,10 +112,12 @@ async def analytics_get(
 
             if response.status_code == 200:
                 _breaker.record_success()
+                analytics_proxy_requests_total.labels(result="success").inc()
                 return response.json()
 
             if response.status_code not in _RETRYABLE_STATUS:
                 _breaker.record_success()
+                analytics_proxy_requests_total.labels(result="success").inc()
                 return response.json()
 
             logger.warning(
@@ -136,5 +140,6 @@ async def analytics_get(
             last_exc = exc
 
     _breaker.record_failure()
+    analytics_proxy_requests_total.labels(result="unavailable").inc()
     logger.error("Analytics: all retries exhausted for %s — last_error=%s", path, last_exc)
     return None

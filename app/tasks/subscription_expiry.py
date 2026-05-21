@@ -2,7 +2,8 @@ import asyncio
 import logging
 
 from app.db.session import async_session_factory
-from app.services.subscription_service import expire_overdue_subscriptions
+from app.metrics import active_subscriptions, subscriptions_expired_total
+from app.services.subscription_service import count_active_subscriptions, expire_overdue_subscriptions
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,11 @@ async def subscription_expiry_loop() -> None:
             async with async_session_factory() as db:
                 count = await expire_overdue_subscriptions(db)
                 if count > 0:
+                    subscriptions_expired_total.inc(count)
+                    active_subscriptions.dec(count)
                     logger.info("Expired %d overdue subscriptions", count)
+                total_active = await count_active_subscriptions(db)
+                active_subscriptions.set(total_active)  # authoritative DB sync
         except Exception:
             logger.error("Error in subscription expiry task", exc_info=True)
 

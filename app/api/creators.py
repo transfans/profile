@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import CurrentUser, get_current_user
 from app.db.session import get_db
 from app.events.publisher import publish_event
+from app.metrics import creators_activated_total
 from app.models.profile import Profile
 from app.schemas.profile import (
     ActivateCreatorResponse,
@@ -32,6 +33,7 @@ async def activate_creator_mode(
         )
 
     await activate_creator(db, profile)
+    creators_activated_total.inc()
     await publish_event(
         "creator.activated",
         {"user_id": str(current_user.id)},

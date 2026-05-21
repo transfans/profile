@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.analytics import router as analytics_router
 from app.api.avatars import router as avatars_router
@@ -57,6 +58,12 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+Instrumentator(
+    should_instrument_requests_inprogress=True,
+    inprogress_name="http_requests_inprogress",
+    excluded_handlers=["/metrics"],
+).instrument(app).expose(app)
 
 app.include_router(analytics_router)
 app.include_router(profiles_router)

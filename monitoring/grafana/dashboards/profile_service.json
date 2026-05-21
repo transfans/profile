@@ -1,0 +1,263 @@
+{
+  "title": "Profile Service",
+  "uid": "profile-service",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "HTTP Layer",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request Rate (req/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_count[1m])) by (handler)",
+          "legendFormat": "{{ handler }}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Error Rate (4xx + 5xx)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_count{status_code=~\"4..|5..\"}[1m])) / sum(rate(http_request_duration_seconds_count[1m]))",
+          "legendFormat": "error rate",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Latency Percentiles (P50 / P95 / P99)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "In-Flight Requests",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "http_requests_inprogress",
+          "legendFormat": "in-flight",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Business Events",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Profiles Created (rate)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(profiles_created_total[1m])",
+          "legendFormat": "profiles/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Creators Activated (rate)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(creators_activated_total[1m])",
+          "legendFormat": "activations/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Tiers Created (rate)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(tiers_created_total[1m])",
+          "legendFormat": "tiers/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Subscriptions Created (rate)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(subscriptions_created_total[1m])",
+          "legendFormat": "created/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Subscriptions Cancelled (rate)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(subscriptions_cancelled_total[1m])",
+          "legendFormat": "cancelled/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Subscriptions Expired (rate)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(subscriptions_expired_total[1m])",
+          "legendFormat": "expired/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Active Subscriptions (live total)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 34 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "active_subscriptions",
+          "legendFormat": "active",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Analytics Proxy Requests (by result)",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 34 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(analytics_proxy_requests_total[1m])",
+          "legendFormat": "{{ result }}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    }
+  ]
+}

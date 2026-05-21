@@ -84,6 +84,33 @@ services:
       sh -c "uvicorn app.main:app --reload --host 0.0.0.0 --port 8002"
     networks:
       - transfans-net
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - transfans-net
+    depends_on:
+      - profile-service
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - transfans-net
+    depends_on:
+      - prometheus
+
 networks:
   transfans-net:
     external: true

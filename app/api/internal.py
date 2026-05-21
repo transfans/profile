@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import require_internal
 from app.db.session import get_db
 from app.events.publisher import publish_event
+from app.metrics import active_subscriptions, subscriptions_cancelled_total, subscriptions_created_total
 from app.schemas.subscription import SubscriptionCheckResponse, SubscriptionCreate, SubscriptionCreatedResponse
 from app.schemas.tier import TierInternalResponse
 from app.services.subscription_service import (
@@ -42,6 +43,8 @@ async def create_new_subscription(
         tier_id=body.tier_id,
         expires_at=body.expires_at,
     )
+    subscriptions_created_total.inc()
+    active_subscriptions.inc()
     await publish_event(
         "subscription.created",
         {
@@ -74,4 +77,6 @@ async def deactivate_subscription_endpoint(
     if not subscription:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
     await deactivate_subscription(db, subscription)
+    subscriptions_cancelled_total.inc()
+    active_subscriptions.dec()
     await publish_event("subscription.cancelled", {"subscription_id": str(subscription_id)})

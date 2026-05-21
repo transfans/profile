@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import CurrentUser, require_creator
 from app.db.session import get_db
 from app.events.publisher import publish_event
+from app.metrics import tiers_created_total, tiers_updated_total
 from app.schemas.tier import TierCreate, TierResponse, TierUpdate
 from app.services.profile_service import get_or_create_profile
 from app.services.tier_service import create_tier, get_tier_by_id, update_tier
@@ -35,6 +36,7 @@ async def create_new_tier(
         description=body.description,
         price=body.price,
     )
+    tiers_created_total.inc()
     await publish_event("tier.created", {"tier_id": str(tier.id), "creator_id": str(current_user.id)})
     return TierResponse.model_validate(tier)
 
@@ -60,5 +62,6 @@ async def update_existing_tier(
         description=body.description,
         is_active=body.is_active,
     )
+    tiers_updated_total.inc()
     await publish_event("tier.updated", {"tier_id": str(tier.id), "creator_id": str(tier.creator_id)})
     return TierResponse.model_validate(tier)
