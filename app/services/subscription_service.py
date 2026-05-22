@@ -57,6 +57,20 @@ async def deactivate_subscription(db: AsyncSession, subscription: Subscription) 
     return subscription
 
 
+async def get_active_subscribed_creator_ids(db: AsyncSession, fan_id: uuid.UUID) -> list[uuid.UUID]:
+    now = datetime.now(UTC)
+    result = await db.execute(
+        select(Subscription.creator_id).where(
+            and_(
+                Subscription.fan_id == fan_id,
+                Subscription.status == SubscriptionStatus.active,
+                Subscription.expires_at > now,
+            )
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def get_fan_subscriptions(
     db: AsyncSession, fan_id: uuid.UUID, status_filter: str = "active"
 ) -> list[Subscription]:

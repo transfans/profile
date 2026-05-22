@@ -7,12 +7,18 @@ from app.core.dependencies import require_internal
 from app.db.session import get_db
 from app.events.publisher import publish_event
 from app.metrics import active_subscriptions, subscriptions_cancelled_total, subscriptions_created_total
-from app.schemas.subscription import SubscriptionCheckResponse, SubscriptionCreate, SubscriptionCreatedResponse
+from app.schemas.subscription import (
+    InternalFanSubscriptionsResponse,
+    SubscriptionCheckResponse,
+    SubscriptionCreate,
+    SubscriptionCreatedResponse,
+)
 from app.schemas.tier import TierInternalResponse
 from app.services.subscription_service import (
     check_subscription,
     create_subscription,
     deactivate_subscription,
+    get_active_subscribed_creator_ids,
     get_subscription_by_id,
 )
 from app.services.tier_service import get_tier_by_id
@@ -27,8 +33,16 @@ async def check_subscription_access(
     db: AsyncSession = Depends(get_db),
 ) -> SubscriptionCheckResponse:
     result = await check_subscription(db, fan_id, creator_id)
-    print(result)
     return SubscriptionCheckResponse(**result)
+
+
+@router.get("/subscriptions", response_model=InternalFanSubscriptionsResponse)
+async def list_fan_subscriptions_internal(
+    fan_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> InternalFanSubscriptionsResponse:
+    creator_ids = await get_active_subscribed_creator_ids(db, fan_id)
+    return InternalFanSubscriptionsResponse(creator_ids=creator_ids)
 
 
 @router.post("/subscriptions", response_model=SubscriptionCreatedResponse, status_code=status.HTTP_201_CREATED)

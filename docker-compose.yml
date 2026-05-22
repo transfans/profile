@@ -2,15 +2,15 @@ services:
   profile-postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: profile_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT}:5432"
     volumes:
       - ./var/postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,11 +20,11 @@ services:
   profile-rabbitmq:
     image: rabbitmq:3.13-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
-      - "5673:5672"
-      - "15673:15672"
+      - "${RABBITMQ_HOST_PORT}:5672"
+      - "${RABBITMQ_MGMT_HOST_PORT}:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -36,11 +36,11 @@ services:
   minio:
     image: minio/minio:latest
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_HOST_PORT}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT}:9001"
     volumes:
       - ./var/minio_data:/data
     command: server /data --console-address ":9001"
@@ -55,22 +55,14 @@ services:
   profile-service:
     build: .
     ports:
-      - "8002:8002"
+      - "${PROFILE_SERVICE_PORT}:8002"
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@profile-postgres:5432/profile_db
-      JWT_SECRET_KEY: super-secret-key-change-in-production-min-32-chars
-      JWT_ALGORITHM: HS256
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@profile-postgres:5432/${POSTGRES_DB}
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET_NAME: avatars
-      MINIO_USE_SSL: "false"
-      RABBITMQ_URL: amqp://guest:guest@profile-rabbitmq:5672/
-      INTERNAL_SECRET: secret
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@profile-rabbitmq:5672/
       ANALYTICS_BASE_URL: http://analytics-service:8003
-      APP_ENV: development
-      DEBUG: "true"
-      PYTHONUNBUFFERED: "1"
     volumes:
       - ./app:/app/app
     depends_on:
@@ -84,6 +76,7 @@ services:
       sh -c "uvicorn app.main:app --reload --host 0.0.0.0 --port 8002"
     networks:
       - transfans-net
+
   prometheus:
     image: prom/prometheus:v2.52.0
     ports:

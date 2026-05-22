@@ -43,6 +43,7 @@ All `/internal/*` endpoints are protected by `X-Internal-Secret` header validate
 Endpoints:
 
 - `GET /internal/subscriptions/check` — Content service checks fan access
+- `GET /internal/subscriptions?fan_id=` — Content service lists active subscribed creator IDs (feed)
 - `POST /internal/subscriptions` — Payment service creates subscriptions (legacy sync path during migration)
 - `GET /internal/tiers/{tier_id}` — Payment service fetches tier price
 - `PATCH /internal/subscriptions/{id}/deactivate` — Payment service cancels (legacy sync path during migration)

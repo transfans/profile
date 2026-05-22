@@ -20,6 +20,10 @@ class SubscriptionCreatedResponse(BaseModel):
     subscription_id: uuid.UUID
 
 
+class InternalFanSubscriptionsResponse(BaseModel):
+    creator_ids: list[uuid.UUID]
+
+
 class TierSummary(BaseModel):
     id: uuid.UUID
     name: str
