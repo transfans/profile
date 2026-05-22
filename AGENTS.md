@@ -1,5 +1,6 @@
 # Profile Service — Implementation Details
 
+
 ## Service Overview
 
 The Profile service (:8002) owns user profiles, subscription tiers, subscriptions, creator search, and avatar storage. It is a self-contained FastAPI microservice with its own PostgreSQL database (`profile_db`), MinIO instance (avatars), and RabbitMQ connection.
